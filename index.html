@@ -69,6 +69,7 @@
         .online-dot { display: inline-block; width: 8px; height: 8px; background: #00ffcc; border-radius: 50%; margin-left: 5px; box-shadow: 0 0 5px #00ffcc; }
         .offline-dot { display: inline-block; width: 8px; height: 8px; background: #627593; border-radius: 50%; margin-left: 5px; }
         .admin-kick-btn { background: #ff4a5a; color: #fff; border: none; border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: bold; cursor: pointer; margin-left: 5px; }
+        .unread-badge { background: #ff4a5a; color: white; font-size: 10px; padding: 1px 5px; border-radius: 8px; font-weight: bold; margin-left: 5px; }
 
         .chat-box { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px; height: 300px; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
         .msg { max-width: 75%; padding: 8px 12px; border-radius: 10px; font-size: 13px; }
@@ -84,24 +85,23 @@
 </head>
 <body>
 
-    <!-- Экран Входа -->
     <div id="authModal">
         <div class="auth-box">
             <h2 style="color: var(--accent); margin-top:0; font-weight: 900; letter-spacing: 1px;">⚡ CYBER ID</h2>
             <p style="font-size: 13px; color: #8aa0c2;">Доступ в закрытую сеть</p>
             <input type="text" id="loginNick" placeholder="Твой никнейм (например, Астемир)">
-            <select id="loginAvatar">
+            <input type="password" id="loginPassword" placeholder="Твой пароль доступа" style="margin-top: 5px;">
+            <select id="loginAvatar" style="margin-top: 5px;">
                 <option value="👑">👑 Лидер</option>
                 <option value="⚡">⚡ Кибер</option>
                 <option value="🤖">🤖 Хакер</option>
                 <option value="🔥">🔥 Огонь</option>
                 <option value="👽">👽 Пришелец</option>
             </select>
-            <button class="main-btn" onclick="login()">Подключиться к узлу</button>
+            <button class="main-btn" onclick="login()" style="margin-top: 5px;">Подключиться к узлу</button>
         </div>
     </div>
 
-    <!-- Основной интерфейс -->
     <div class="container" id="mainApp" style="display: none;">
         <header>
             <div class="logo">⚡ CF_4.0</div>
@@ -125,7 +125,6 @@
             <div class="tab-btn" onclick="logout()" style="flex: 0.4; background: rgba(255,74,90,0.1); color: #ff4a5a; border-color: rgba(255,74,90,0.3);">🚪 Выход</div>
         </div>
 
-        <!-- Лента -->
         <div id="tabFeed">
             <input type="text" id="searchInput" placeholder="🔍 Поиск по автору, тексту или #тегу...">
 
@@ -151,7 +150,6 @@
             <div id="feed"></div>
         </div>
 
-        <!-- Директ -->
         <div id="tabDm" class="hidden">
             <div style="font-size: 13px; color: #8aa0c2; margin-bottom: 8px;">Доступные контакты:</div>
             <div class="dm-user-list" id="dmUserList"></div>
@@ -171,7 +169,6 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
     <script>
-        // Тот же конфиг Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyDpVfyvm6r-KuH2xNdJSx93L12uYXjh2Bo",
             authDomain: "my-social-net.firebaseapp.com",
@@ -189,12 +186,12 @@
         let currentPostsArray = [];
         let searchQuery = "";
         let activeDmUser = null;
-        let onlineUsers = {}; // Храним статусы онлайна
-        let isAdminMode = false; // Переменная статуса админа
+        let onlineUsers = {}; 
+        let unreadChats = {}; 
+        let isAdminMode = false; 
 
-        const SECRET_ADMIN_NICK = "Админ_Астемир"; // Ключ для входа
+        const SECRET_ADMIN_NICK = "Админ_Астемир"; 
 
-        // Звуки
         function playSound(type) {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -205,7 +202,6 @@
             } catch(e) {}
         }
 
-        // --- SPA АВТОРИЗАЦИЯ (Без перезагрузок) ---
         window.onload = () => {
             const savedNick = localStorage.getItem("cyber_nick");
             const savedAvatar = localStorage.getItem("cyber_avatar");
@@ -222,42 +218,47 @@
 
         function login() {
             const nick = document.getElementById("loginNick").value.trim();
+            const password = document.getElementById("loginPassword").value.trim();
             const avatar = document.getElementById("loginAvatar").value;
             if (!nick) return alert("Введите позывной!");
-            currentUser = { nick, avatar };
-            isAdminMode = (currentUser.nick === SECRET_ADMIN_NICK);
-            localStorage.setItem("cyber_nick", nick);
-            localStorage.setItem("cyber_avatar", avatar);
-            playSound('send');
-            showMainApp();
-            initApp();
+            if (!password) return alert("Введите секретный ключ доступа (пароль)!");
+
+            db.ref("users_passwords/" + nick).once("value", (snap) => {
+                const existingPassword = snap.val();
+                if (existingPassword !== null) {
+                    if (existingPassword !== password) {
+                        return alert("Ключ шифрования не совпадает! Доступ заблокирован.");
+                    }
+                } else {
+                    db.ref("users_passwords/" + nick).set(password);
+                }
+
+                currentUser = { nick, avatar };
+                isAdminMode = (currentUser.nick === SECRET_ADMIN_NICK);
+                localStorage.setItem("cyber_nick", nick);
+                localStorage.setItem("cyber_avatar", avatar);
+                playSound('send');
+                showMainApp();
+                initApp();
+            });
         }
 
-        // ИСПРАВЛЕННЫЙ ВЫХОД
         function logout() {
             localStorage.removeItem("cyber_nick");
             localStorage.removeItem("cyber_avatar");
-            
-            // Отключаем статус онлайна
             if (currentUser) db.ref("users_status/" + currentUser.nick).set(false);
-            
-            // Жестко отключаем все слушатели от Firebase, чтобы они не кэшировались
             db.ref().off();
-            
             currentUser = null;
             activeDmUser = null;
             isAdminMode = false;
-            
-            // Скрываем приложение, показываем авторизацию (Без window.reload!)
             document.getElementById("mainApp").style.display = "none";
             document.getElementById("authModal").style.display = "flex";
-            
-            // Очищаем визуал
             document.getElementById("feed").innerHTML = "";
             document.getElementById("chatBox").innerHTML = "";
             document.getElementById("chatArea").classList.add("hidden");
             document.getElementById("notifBadge").style.display = "none";
             document.getElementById("loginNick").value = "";
+            document.getElementById("loginPassword").value = "";
         }
 
         function showMainApp() {
@@ -273,9 +274,7 @@
             playSound('click');
         }
 
-        // --- ИНИЦИАЛИЗАЦИЯ ДАННЫХ ---
         function initApp() {
-            // 1. Установка статуса онлайна
             const myStatusRef = db.ref("users_status/" + currentUser.nick);
             db.ref(".info/connected").on("value", (snap) => {
                 if (snap.val() === true) {
@@ -284,14 +283,13 @@
                 }
             });
 
-            // 2. Слушаем онлайн других пользователей
             db.ref("users_status").on("value", (snap) => {
                 onlineUsers = snap.val() || {};
                 updateDmListUI();
             });
 
-            // 3. Слушаем ленту
-            db.ref("posts").on("value", (snapshot) => {
+            // Ограничение на последние 50 постов (чтобы база не тормозила)
+            db.ref("posts").limitToLast(50).on("value", (snapshot) => {
                 currentPostsArray = [];
                 snapshot.forEach((child) => {
                     const post = child.val();
@@ -302,7 +300,6 @@
                 updateDmListUI();
             });
 
-            // 4. Слушаем уведомления
             db.ref("notifications/" + currentUser.nick).on("value", (snapshot) => {
                 const notifList = document.getElementById("notifList");
                 notifList.innerHTML = "";
@@ -316,9 +313,27 @@
                 if (count > 0) { badge.innerText = count; badge.style.display = "inline-block"; playSound('click'); }
                 else { badge.style.display = "none"; }
             });
+
+            // Слушаем новые сообщения во всех комнатах для индикатора уведомлений
+            db.ref("directs").on("value", (snap) => {
+                unreadChats = {};
+                snap.forEach((roomSnap) => {
+                    const roomId = roomSnap.key;
+                    if (roomId.includes(currentUser.nick)) {
+                        const targetUser = roomId.replace(currentUser.nick, "").replace("_", "");
+                        if (targetUser !== activeDmUser) {
+                            let lastMsg = null;
+                            roomSnap.forEach((msgSnap) => { lastMsg = msgSnap.val(); });
+                            if (lastMsg && lastMsg.from !== currentUser.nick) {
+                                unreadChats[targetUser] = true;
+                            }
+                        }
+                    }
+                });
+                updateDmListUI();
+            });
         }
 
-        // --- ПОСТЫ И КОММЕНТАРИИ ---
         function handleImageUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -387,21 +402,29 @@
             }
         }
 
-        // АДМИН-ФУНКЦИЯ: БАН ПОЛЬЗОВАТЕЛЯ
+        // АДМИН-ФУНКЦИЯ: КАСКАДНОЕ УДАЛЕНИЕ ПОЛЬЗОВАТЕЛЯ И ЕГО ПОСТОВ
         function adminKickUser(userNick) {
-            if (confirm(`Вы уверены, что хотите ПОЛНОСТЬЮ УДАЛИТЬ аккаунт ${userNick} из базы данных?`)) {
-                db.ref("users_status/" + userNick).remove()
-                    .then(() => alert(`Пользователь ${userNick} успешно удален из сети.`))
-                    .catch(e => alert("Ошибка Firebase: " + e.message));
+            if (confirm(`Вы уверены, что хотите ПОЛНОСТЬЮ УДАЛИТЬ аккаунт ${userNick} и все его посты из системы?`)) {
+                // 1. Стираем статус и пароль
+                db.ref("users_status/" + userNick).remove();
+                db.ref("users_passwords/" + userNick).remove();
+                
+                // 2. Стираем все посты автора
+                db.ref("posts").once("value", (snap) => {
+                    snap.forEach((child) => {
+                        if (child.val().author === userNick) {
+                            db.ref("posts/" + child.key).remove();
+                        }
+                    });
+                    alert(`Объект ${userNick} полностью ликвидирован.`);
+                });
             }
         }
 
-        // --- ДИРЕКТ ---
         function updateDmListUI() {
-            // Собираем уникальных юзеров из постов
             const usersSet = new Set(Object.keys(onlineUsers)); 
             currentPostsArray.forEach(p => { if (p.author && p.author !== currentUser.nick) usersSet.add(p.author); });
-            usersSet.delete(currentUser.nick); // Убираем себя
+            usersSet.delete(currentUser.nick); 
             
             const list = document.getElementById("dmUserList");
             list.innerHTML = "";
@@ -409,20 +432,22 @@
                 const isOnline = onlineUsers[u] === true;
                 const dotClass = isOnline ? "online-dot" : "offline-dot";
                 
-                // Добавляем админскую кнопку БАНА, если зашел Админ
                 const adminBtnHTML = isAdminMode ? `<button class="admin-kick-btn" onclick="event.stopPropagation(); adminKickUser('${u}')">❌ БАН</button>` : '';
+                const unreadHTML = unreadChats[u] ? `<span class="unread-badge">✉️ новое</span>` : '';
                 
-                list.innerHTML += `<div class="dm-user ${activeDmUser === u ? 'active' : ''}" onclick="openChat('${u}')">👤 ${u} <span class="${dotClass}"></span>${adminBtnHTML}</div>`;
+                list.innerHTML += `<div class="dm-user ${activeDmUser === u ? 'active' : ''}" onclick="openChat('${u}')">👤 ${u} <span class="${dotClass}"></span>${unreadHTML}${adminBtnHTML}</div>`;
             });
         }
 
         function openChat(targetUser) {
             activeDmUser = targetUser;
+            if (unreadChats[targetUser]) delete unreadChats[targetUser];
             document.getElementById("chatArea").classList.remove("hidden");
             document.getElementById("chatWithTitle").innerText = `Шифр-канал: ${targetUser}`;
             updateDmListUI();
             
             const roomId = [currentUser.nick, targetUser].sort().join("_");
+            db.ref("directs/" + roomId).off(); // Снимаем старый слушатель, если был
             db.ref("directs/" + roomId).on("value", (s) => {
                 const box = document.getElementById("chatBox");
                 box.innerHTML = "";
@@ -444,7 +469,6 @@
             input.value = ""; playSound('send');
         }
 
-        // --- UI УТИЛИТЫ ---
         function switchTab(tab) {
             document.getElementById("tabFeed").className = tab === 'feed' ? '' : 'hidden';
             document.getElementById("tabDm").className = tab === 'dm' ? '' : 'hidden';
@@ -482,7 +506,6 @@
                 let commentsHTML = "";
                 if (post.comments) {
                     Object.entries(post.comments).forEach(([commId, c]) => {
-                        // Кнопка удаления коммента видна автору коммента ИЛИ Админу
                         const canDelete = c.author === currentUser.nick || isAdminMode;
                         commentsHTML += `<div class="comment-item">
                             <div><span class="comment-author">${c.author}:</span>${c.text}</div>
@@ -491,7 +514,6 @@
                     });
                 }
 
-                // Логика кнопки удаления постов: автор видит "Стереть", Админ под чужими постами видит "Стереть (Админ)"
                 let deleteBtnHTML = "";
                 if (authorNick === currentUser.nick) {
                     deleteBtnHTML = `<button class="action-btn" onclick="db.ref('posts/${post.id}').remove()">🗑️ Стереть</button>`;
